@@ -139,7 +139,12 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    api('/api/summary').then(setSummary).catch((e) => setError(e.message));
+    api('/api/summary')
+      .then((s) => {
+        setSummary(s);
+        if (!s.entriesFile) setUploadOpen(true);
+      })
+      .catch((e) => setError(e.message));
     ['test', 'live'].forEach((m) =>
       api(`/api/account?mode=${m}`)
         .then((a) => setAccount((prev) => ({ ...prev, [m]: a })))
@@ -157,7 +162,7 @@ export default function App() {
   const liveCredits = account.live?.remainingCredits ?? 0;
   // GET /account leaves out trial credits (confirmed by RandomDraws support), so a
   // 0 balance doesn't block live draws. The API rejects the draw if none are left.
-  const canCreate = summary && !busy && !creating && (mode === 'test' || !account.live?.error);
+  const canCreate = summary && summary.entries > 0 && !busy && !creating && (mode === 'test' || !account.live?.error);
   const canDraw = draft && labels.length > 1 && !busy && !creating;
   const creditText = liveCredits > 0 ? `${fmt(liveCredits)} paid credits plus any trial credits` : 'trial credits only (not shown by the API)';
 
@@ -454,10 +459,14 @@ export default function App() {
                     <span className="stat-label">Rewards members</span>
                   </div>
                 </div>
-                <p className="muted small">
-                  {summary.entriesFile} · {(summary.sizeBytes / 1048576).toFixed(1)} MB
-                  {summary.isUpload && <span className="tag test">uploaded</span>}
-                </p>
+                {summary.entriesFile ? (
+                  <p className="muted small">
+                    {summary.entriesFile} · {(summary.sizeBytes / 1048576).toFixed(1)} MB
+                    {summary.isUpload && <span className="tag test">uploaded</span>}
+                  </p>
+                ) : (
+                  <p className="warn small">No entries file loaded yet. Upload one to get started.</p>
+                )}
 
                 <button className="linkish small" onClick={() => setUploadOpen((o) => !o)} disabled={busy}>
                   {uploadOpen ? 'Hide upload' : 'Upload new entries file'}
@@ -582,7 +591,7 @@ export default function App() {
                   {creating ? 'Creating draw…' : '1. Create draw'}
                 </button>
                 <p className="muted small step-hint">
-                  Uploads {summary ? summary.entriesFile : 'the entries file'} to randomdraws.com as a draft. No credit is
+                  Uploads {summary?.entriesFile || 'the entries file'} to randomdraws.com as a draft. No credit is
                   used until you draw or schedule it.
                 </p>
               </>

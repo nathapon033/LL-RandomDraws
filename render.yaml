@@ -1,0 +1,39 @@
+# Render blueprint: one web service running the page and the API together.
+# Secrets marked sync: false are entered in the Render dashboard, never in this file.
+services:
+  - type: web
+    name: ll-random-draws
+    runtime: node
+    plan: starter            # needed for the persistent disk below; "free" works without it
+    region: singapore        # closest Render region to Australia
+    branch: main
+    autoDeploy: true         # redeploy on every push to main
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: HOST
+        value: 0.0.0.0
+      - key: TZ
+        value: Australia/Sydney
+      - key: DATA_DIR
+        value: /var/data
+      - key: RD_BASE_URL
+        value: https://api.randomdraws.com/
+      - key: RD_EMAIL
+        sync: false
+      - key: RD_PASSWORD
+        sync: false
+      - key: APP_USER
+        sync: false
+      - key: APP_PASSWORD
+        sync: false
+      - key: UPLOAD_PASSCODE
+        sync: false
+    # Keeps uploaded entries files and draw records across deploys and restarts
+    disk:
+      name: draw-data
+      mountPath: /var/data
+      sizeGB: 1

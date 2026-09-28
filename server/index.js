@@ -10,17 +10,29 @@ import { fileURLToPath } from 'node:url';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const BASE = (process.env.RD_BASE_URL || 'https://api.randomdraws.com/').replace(/\/?$/, '/');
 const DEFAULT_ENTRIES_FILE = path.resolve(ROOT, process.env.ENTRIES_FILE || 'll-entries.csv');
-const UPLOAD_DIR = path.join(ROOT, 'uploads');
+// Where uploads/ and data/ live. On a host, point this at a persistent disk.
+const DATA_DIR = path.resolve(ROOT, process.env.DATA_DIR || '.');
+const UPLOAD_DIR = path.join(DATA_DIR, 'uploads');
 const ACTIVE_FILE = path.join(UPLOAD_DIR, 'active.json'); // remembers the uploaded file across restarts
 const UPLOAD_PASSCODE = process.env.UPLOAD_PASSCODE || '';
-const DRAW_META_FILE = path.join(ROOT, 'data', 'draws.json');
+const DRAW_META_FILE = path.join(DATA_DIR, 'data', 'draws.json');
 const MAX_UPLOAD_BYTES = 100 * 1024 * 1024; // RandomDraws upload limit
 const PRIZE_FILE = path.resolve(ROOT, process.env.PRIZE_FILE || 'll-prize.csv');
 const PORT = Number(process.env.PORT || 5174);
+// Localhost only by default; a host like Render sets HOST=0.0.0.0
+const HOST = process.env.HOST || '127.0.0.1';
+// Optional sign-in for the whole site (page and API), required when hosted
+const APP_USER = process.env.APP_USER || '';
+const APP_PASSWORD = process.env.APP_PASSWORD || '';
 const TEST_MODE_MAX_ENTRIES = 20; // RandomDraws test mode limit
 
+if (HOST !== '127.0.0.1' && HOST !== 'localhost' && !(APP_USER && APP_PASSWORD)) {
+  console.error('APP_USER and APP_PASSWORD must be set when the app is reachable from other machines');
+  process.exit(1);
+}
+
 if (!process.env.RD_EMAIL || !process.env.RD_PASSWORD) {
-  console.error('RD_EMAIL and RD_PASSWORD must be set in server/.env');
+  console.error('RD_EMAIL and RD_PASSWORD must be set in server/.env or the host environment');
   process.exit(1);
 }
 
@@ -61,11 +73,15 @@ function parseEntries(file) {
   return { header: lines[0], headerCols: header, rows, cards, counts };
 }
 
-function loadData() {
-  const stat = fs.statSync(entriesFile);
-  if (data && data.file === entriesFile && data.mtimeMs === stat.mtimeMs) return data;
+const EMPTY_ENTRIES = { header: '', headerCols: [], rows: [], cards: [], counts: new Map() };
 
-  const { header, headerCols, rows, cards, counts } = parseEntries(entriesFile);
+function loadData() {
+  const stat = fs.existsSync(entriesFile) ? fs.statSync(entriesFile) : null;
+  const mtimeMs = stat ? stat.mtimeMs : 0;
+  if (data && data.file === entriesFile && data.mtimeMs === mtimeMs) return data;
+
+  // No file yet: start empty and wait for an upload
+  const { header, headerCols, rows, cards, counts } = stat ? parseEntries(entriesFile) : EMPTY_ENTRIES;
   const top = [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5);
 
   const prizeLines = readLines(PRIZE_FILE);
@@ -89,24 +105,24 @@ function loadData() {
 
   data = {
     file: entriesFile,
-    mtimeMs: stat.mtimeMs,
+    mtimeMs,
     header,
     headerCols,
     rows,
     cards,
     counts,
     summary: {
-      entriesFile: path.basename(entriesFile),
+      entriesFile: stat ? path.basename(entriesFile) : null,
       isUpload: entriesFile !== DEFAULT_ENTRIES_FILE,
       defaultFile: path.basename(DEFAULT_ENTRIES_FILE),
-      sizeBytes: stat.size,
+      sizeBytes: stat ? stat.size : 0,
       entries: rows.length,
       uniqueCards: counts.size,
       topCards: top.map(([card, entries]) => ({ card, entries })),
       prizes,
     },
   };
-  console.log(`Loaded ${rows.length.toLocaleString()} entries, ${counts.size.toLocaleString()} cards`);
+  console.log(stat ? `Loaded ${rows.length.toLocaleString()} entries, ${counts.size.toLocaleString()} cards` : 'No entries file yet: upload one from the page');
   return data;
 }
 
@@ -172,6 +188,21 @@ async function rd(mode, method, route, { json, form } = {}) {
 // ---------- Routes ----------
 
 const app = express();
+
+// Health check for the host; answers before sign-in and reveals nothing
+app.get('/api/health', (req, res) => res.json({ ok: true }));
+
+// Browser sign-in (HTTP Basic) for everything when APP_USER/APP_PASSWORD are set
+if (APP_USER && APP_PASSWORD) {
+  const expected = Buffer.from(`${APP_USER}:${APP_PASSWORD}`);
+  app.use((req, res, next) => {
+    const [scheme, value] = String(req.get('authorization') || '').split(' ');
+    const given = scheme === 'Basic' ? Buffer.from(value || '', 'base64') : Buffer.alloc(0);
+    if (given.length === expected.length && crypto.timingSafeEqual(given, expected)) return next();
+    res.set('WWW-Authenticate', 'Basic realm="Rewards Prize Draw", charset="UTF-8"').status(401).send('Sign in required');
+  });
+}
+
 app.use(express.json());
 
 const wrap = (fn) => (req, res) =>
@@ -290,6 +321,7 @@ function parseScheduleDate(value) {
 // Drafts use no credit and can be checked, then drawn, scheduled or deleted.
 async function createDraft(mode, name) {
   const d = loadData();
+  if (d.rows.length === 0) throw new ApiError(400, 'No entries file is loaded. Upload one first.');
 
   // Test mode only accepts 20 entries, so a larger file is cut down to a random
   // 20-row subset. Otherwise the entries file is uploaded untouched.
@@ -483,7 +515,7 @@ if (fs.existsSync(dist)) {
   app.get(/^\/(?!api).*/, (req, res) => res.sendFile(path.join(dist, 'index.html')));
 }
 
-app.listen(PORT, '127.0.0.1', () => {
-  console.log(`Draw API on http://localhost:${PORT}`);
+app.listen(PORT, HOST, () => {
+  console.log(`Draw API on http://${HOST === '0.0.0.0' ? 'localhost' : HOST}:${PORT}${APP_USER ? ' (sign-in on)' : ''}`);
   loadData();
 });

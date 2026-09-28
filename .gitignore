@@ -7,3 +7,4 @@ data
 # Member entry data: never commit
 ll-entries*.csv
 *.log
+note.txt

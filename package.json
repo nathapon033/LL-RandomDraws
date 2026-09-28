@@ -8,7 +8,8 @@
     "server": "node --env-file=server/.env --watch server/index.js",
     "client": "vite",
     "build": "vite build",
-    "start": "vite build && node --env-file=server/.env server/index.js"
+    "start": "node --env-file-if-exists=server/.env server/index.js",
+    "start:local": "vite build && node --env-file=server/.env server/index.js"
   },
   "dependencies": {
     "express": "^5.2.1",
@@ -19,5 +20,8 @@
     "@vitejs/plugin-react": "^6.1.1",
     "concurrently": "^10.0.5",
     "vite": "^8.3.1"
+  },
+  "engines": {
+    "node": ">=22.9"
   }
 }

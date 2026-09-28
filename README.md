@@ -71,3 +71,22 @@ the right entry row after a restart or a new upload.
 
 **Back (keep draft)** leaves it for later. Saved drafts are listed under **Drafts** on the
 right, where they can be selected or deleted. Deleting a draft costs nothing.
+
+## Hosting on Render
+
+`render.yaml` sets up one web service that runs the page and the API together, and redeploys
+on every push to `main`.
+
+1. In Render: **New > Blueprint**, connect GitHub and pick `nathapon033/LL-RandomDraws`.
+2. Fill in the secret values when asked: `RD_EMAIL`, `RD_PASSWORD`, `UPLOAD_PASSCODE`, and
+   `APP_USER` / `APP_PASSWORD` (the sign-in everyone uses to open the site).
+3. Deploy, open the `.onrender.com` URL, sign in, and upload the entries file with the passcode.
+
+Notes:
+- The site always asks for sign-in when hosted. The server won't start on Render without
+  `APP_USER` and `APP_PASSWORD`.
+- Member entry files are never in the repo. Upload them through the page. They are kept on
+  the persistent disk at `/var/data` (Starter plan). On the free plan there's no disk, so
+  uploads and draw records are lost on each deploy or restart, and the service sleeps after
+  15 minutes idle (scheduled draws still run on randomdraws.com).
+- `TZ=Australia/Sydney` keeps upload file names in Sydney time.
