@@ -1,0 +1,9 @@
+node_modules
+dist
+server/.env
+uploads
+data
+
+# Member entry data: never commit
+ll-entries*.csv
+*.log

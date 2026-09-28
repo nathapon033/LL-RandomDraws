@@ -1,0 +1,23 @@
+{
+  "name": "ll-random-draw",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently -k -n server,client -c red,cyan \"npm:server\" \"npm:client\"",
+    "server": "node --env-file=server/.env --watch server/index.js",
+    "client": "vite",
+    "build": "vite build",
+    "start": "vite build && node --env-file=server/.env server/index.js"
+  },
+  "dependencies": {
+    "express": "^5.2.1",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^6.1.1",
+    "concurrently": "^10.0.5",
+    "vite": "^8.3.1"
+  }
+}
