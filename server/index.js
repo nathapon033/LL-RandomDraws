@@ -149,9 +149,12 @@ async function getToken(mode) {
       password: process.env.RD_PASSWORD,
       testMode: mode === 'test',
     }),
+  }).catch((err) => {
+    throw new ApiError(502, `Could not reach RandomDraws (${err.cause?.code || err.message})`);
   });
   const body = await res.json().catch(() => ({}));
-  if (!res.ok) throw new ApiError(res.status, body.message || 'Authentication failed');
+  if (!res.ok) throw new ApiError(res.status, body.message || `RandomDraws sign-in failed (${res.status})`);
+  if (!body.token) throw new ApiError(502, 'RandomDraws sign-in returned no token');
   const payload = JSON.parse(Buffer.from(body.token.split('.')[1], 'base64url').toString());
   tokens[mode] = { token: body.token, exp: payload.exp * 1000 };
   return body.token;
@@ -173,7 +176,9 @@ async function rd(mode, method, route, { json, form } = {}) {
   } else if (form) {
     body = form;
   }
-  const res = await fetch(BASE + route, { method, headers, body });
+  const res = await fetch(BASE + route, { method, headers, body }).catch((err) => {
+    throw new ApiError(502, `Could not reach RandomDraws (${err.cause?.code || err.message})`);
+  });
   const text = await res.text();
   let parsed;
   try {

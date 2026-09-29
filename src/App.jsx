@@ -27,9 +27,17 @@ const countdown = (iso, now) => {
 };
 
 async function api(path, options) {
-  const res = await fetch(path, options);
+  const res = await fetch(path, options).catch(() => {
+    throw new Error('Cannot reach the draw server. Check it is running.');
+  });
   const body = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(body.message || `Request failed (${res.status})`);
+  if (!res.ok) {
+    // No message means the draw server itself didn't answer (a proxy or host replied)
+    if (!body.message && res.status >= 502) {
+      throw new Error(`Draw server not responding (${res.status}). It may be starting up or stopped.`);
+    }
+    throw new Error(body.message || `Request failed (${res.status})`);
+  }
   return body;
 }
 
@@ -567,6 +575,7 @@ export default function App() {
                   ? `Account error: ${account.live.error}`
                   : `Uploads all ${fmt(summary?.entries)} entries and uses 1 credit. Available: ${creditText}.`}
             </p>
+            {mode === 'test' && account.test?.error && <p className="muted small">Account error: {account.test.error}</p>}
 
             <label className="field">
               <span>Wheel segments: {segments}</span>
